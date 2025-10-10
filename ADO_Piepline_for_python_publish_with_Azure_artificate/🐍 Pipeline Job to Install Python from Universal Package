@@ -1,0 +1,106 @@
+Installing the Python interpreter from the Universal Package requires a new pipeline job. This job will **download** the Universal Package from the Azure Artifacts feed, **extract** the source code, **compile** it, and **install** the interpreter on the agent machine.
+
+Here is the YAML for a subsequent pipeline job to perform the installation.
+
+### 🐍 Pipeline Job to Install Python from Universal Package
+
+This job assumes the previous pipeline successfully published the Universal Package named `Python-Linux-Interpreter` with version `3.11.5` to your feed.
+
+```yaml
+# You can add this as a separate stage/job in the same pipeline 
+# or a new pipeline entirely (e.g., a Release pipeline).
+
+pool:
+  vmImage: 'ubuntu-latest' # Needs a Linux agent for compilation
+
+variables:
+  PYTHON_VERSION: '3.11.5'
+  PACKAGE_NAME: 'Python-Linux-Interpreter'
+  ARTIFACT_FEED: '<YOUR_FEED_NAME>' # Must match the publishing feed
+  
+  # Directory where the package contents will be downloaded
+  DOWNLOAD_DIR: '$(Agent.BuildDirectory)/Python_Installer_UP'
+  
+  # Directory where Python will be installed
+  INSTALL_PREFIX: '$(Agent.BuildDirectory)/CustomPython'
+
+steps:
+
+# 1. Download the Universal Package
+# --------------------------------------------------------------------------------
+- task: UniversalPackages@0
+  displayName: '1. Download Python Universal Package'
+  inputs:
+    command: 'download'
+    vstsFeed: '$(ARTIFACT_FEED)'
+    packageName: '$(PACKAGE_NAME)'
+    version: '$(PYTHON_VERSION)'
+    downloadDirectory: '$(DOWNLOAD_DIR)'
+    # After this, the .tgz file will be in $(DOWNLOAD_DIR)/python_installer/
+    # (due to the way the publish step structured the package directory)
+
+
+# 2. Extract the Python Source Code
+# --------------------------------------------------------------------------------
+- bash: |
+    echo "Listing downloaded files in $(DOWNLOAD_DIR)/python_installer"
+    ls -l $(DOWNLOAD_DIR)/python_installer/
+
+    # The file we published was 'Python-3.11.5.tgz' inside the 'python_installer' folder
+    ARCHIVE_PATH="$(DOWNLOAD_DIR)/python_installer/Python-$(PYTHON_VERSION).tgz"
+    
+    echo "Extracting $ARCHIVE_PATH..."
+    # Extract the archive into a subdirectory
+    mkdir -p $(DOWNLOAD_DIR)/src
+    tar -xzf $ARCHIVE_PATH -C $(DOWNLOAD_DIR)/src
+    
+    # Set a variable for the extracted source directory (e.g., .../src/Python-3.11.5)
+    echo "##vso[task.setvariable variable=SOURCE_CODE_DIR]$(DOWNLOAD_DIR)/src/Python-$(PYTHON_VERSION)"
+  displayName: '2. Extract Python Source Code'
+  
+
+# 3. Configure, Compile, and Install Python
+# --------------------------------------------------------------------------------
+- bash: |
+    # Install necessary build dependencies on the agent
+    sudo apt-get update
+    sudo apt-get install -y build-essential zlib1g-dev libncurses5-dev libgdbm-dev libssl-dev libreadline-dev libffi-dev libsqlite3-dev wget curl llvm
+    
+    echo "Starting compilation and installation..."
+    cd $(SOURCE_CODE_DIR)
+    
+    # Configure the build to install to the custom prefix
+    # --enable-optimizations is important for performance
+    ./configure --enable-optimizations --with-ensurepip=install --prefix=$(INSTALL_PREFIX)
+
+    # Compile the code (using -j to parallelize build)
+    make -j$(nproc)
+    
+    # Install the interpreter to the specified prefix
+    make install
+    
+    # Check the installation
+    echo "Installation complete. Checking version:"
+    $(INSTALL_PREFIX)/bin/python3 --version
+    
+    # Add the custom install directory to PATH for subsequent tasks
+    echo "##vso[task.prependpath]$(INSTALL_PREFIX)/bin"
+  displayName: '3. Compile and Install Python Interpreter'
+  
+# 4. (Optional) Run a script using the custom installed Python
+# --------------------------------------------------------------------------------
+- bash: |
+    # The 'python3' command is now available due to the prependpath command in the previous step
+    python3 -c "import sys; print(f'Successfully ran custom Python installed at: {sys.prefix}')"
+  displayName: '4. Verify Custom Python Installation'
+
+```
+
+### Summary of Installation Steps:
+
+1.  **Download:** Use `UniversalPackages@0` to fetch the compressed Python source code (`.tgz`) from your Artifacts feed to the agent's disk.
+2.  **Extract:** Use the `tar` command in a `bash` script to decompress the source code archive.
+3.  **Dependencies:** Install common build tools like `build-essential` and necessary library headers using `sudo apt-get install`.
+4.  **Configure:** Run the Python source code's `./configure` script, specifying the desired **`--prefix`** (install directory) and enabling optimizations.
+5.  **Compile and Install:** Run `make` and `make install` to compile the source code and place the resulting interpreter and libraries into the specified `$(INSTALL_PREFIX)`.
+6.  **Verification:** The `##vso[task.prependpath]` command makes the new custom Python executable available to all subsequent tasks in the current job.
