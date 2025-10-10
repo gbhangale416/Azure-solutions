@@ -1,0 +1,60 @@
+trigger:
+- none # Prevent automatic builds
+
+pool:
+  vmImage: 'ubuntu-latest'
+
+variables:
+  # --- Configuration Variables ---
+  PYTHON_VERSION: '3.11.5'
+  PLATFORM: 'tgz'
+  DOWNLOAD_URL: 'https://www.python.org/ftp/python/$(PYTHON_VERSION)/Python-$(PYTHON_VERSION).$(PLATFORM)'
+  
+  # The name for the Universal Package in Azure Artifacts
+  PACKAGE_NAME: 'Python-Linux-Interpreter'
+  
+  # The Artifacts Feed to publish to (Replace <YOUR_FEED_NAME> with your actual feed name)
+  # Use '<ProjectName>/<FeedName>' for project-scoped feeds
+  ARTIFACT_FEED: '<YOUR_FEED_NAME>' 
+  
+  # The standard directory for staging files to be published
+  # We append a subfolder to keep things organized.
+  STAGING_DIR: '$(Build.ArtifactStagingDirectory)/python_installer'
+
+steps:
+
+# 1. Download the Python Installer Archive
+# --------------------------------------------------------------------------------
+- bash: |
+    echo "Creating staging directory: $(STAGING_DIR)"
+    mkdir -p $(STAGING_DIR)
+
+    FILE_NAME="Python-$(PYTHON_VERSION).$(PLATFORM)"
+    TARGET_PATH="$(STAGING_DIR)/$FILE_NAME"
+    
+    echo "Downloading installer from $(DOWNLOAD_URL) to $TARGET_PATH..."
+    # Use curl to download the .tgz installer
+    curl -o $TARGET_PATH $(DOWNLOAD_URL)
+
+    # Simple check to ensure the download succeeded
+    if [ ! -f "$TARGET_PATH" ]; then
+      echo "##vso[task.logissue type=error]Download failed for $FILE_NAME."
+      exit 1
+    fi
+    echo "$FILE_NAME downloaded successfully."
+  displayName: '1. Download Python Installer Archive'
+
+# 2. Publish the Downloaded Archive as a Universal Package
+# --------------------------------------------------------------------------------
+- task: UniversalPackages@0
+  displayName: '2. Publish Universal Package to Azure Artifacts'
+  inputs:
+    command: 'publish'
+    # publishDirectory: The path containing the file(s) to publish.
+    # We use the variable defined above, which points to the standard staging path.
+    publishDirectory: '$(STAGING_DIR)' 
+    # vstsFeedPublish: The target Azure Artifacts feed.
+    vstsFeedPublish: '$(ARTIFACT_FEED)'
+    packageName: '$(PACKAGE_NAME)'
+    versionPublish: '$(PYTHON_VERSION)'
+    description: 'Python source distribution for Linux - v$(PYTHON_VERSION)'
