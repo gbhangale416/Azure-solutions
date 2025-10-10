@@ -1,0 +1,100 @@
+You want an end-to-end Azure DevOps YAML pipeline that downloads a Python installer for Linux, and then publishes it as a Universal Package to Azure Artifacts.
+
+Here is the complete YAML pipeline:
+
+-----
+
+## 🐍 End-to-End Azure Pipeline for Python Installer
+
+This pipeline uses a **Microsoft-hosted Ubuntu agent** to perform the download and publishing steps.
+
+### Prerequisites
+
+1.  An Azure DevOps **Project**.
+2.  An Azure Artifacts **Feed** (scoped to your Project or Organization).
+3.  Ensure your **Build Service** has **Contributor** or **Publisher** permissions on the target Artifacts Feed.
+
+### `azure-pipelines.yml`
+
+```yaml
+trigger:
+- none # Prevent automatic builds
+
+pool:
+  vmImage: 'ubuntu-latest'
+
+variables:
+  # The Python version we want to download
+  PYTHON_VERSION: '3.11.5'
+  # The target platform (for the installer name)
+  PLATFORM: 'tgz'
+  # The URL for the Linux source installer from python.org
+  DOWNLOAD_URL: 'https://www.python.org/ftp/python/$(PYTHON_VERSION)/Python-$(PYTHON_VERSION).$(PLATFORM)'
+  # The name for the Universal Package in Azure Artifacts
+  PACKAGE_NAME: 'Python-Linux-Interpreter'
+  # The Artifacts Feed to publish to (Replace <FeedName> with your feed)
+  ARTIFACT_FEED: '<YOUR_FEED_NAME>'
+  # Local staging directory for the downloaded file
+  STAGING_DIR: '$(Build.ArtifactStagingDirectory)/python_dist'
+
+steps:
+
+# 1. Download the Python Installer Archive
+# --------------------------------------------------------------------------------
+- bash: |
+    echo "Staging directory: $(STAGING_DIR)"
+    mkdir -p $(STAGING_DIR)
+
+    echo "Downloading $(DOWNLOAD_URL)..."
+    # Use curl to download the .tgz installer to the staging directory
+    curl -o $(STAGING_DIR)/Python-$(PYTHON_VERSION).$(PLATFORM) $(DOWNLOAD_URL)
+
+    # Verify download success (optional, but recommended)
+    if [ ! -f "$(STAGING_DIR)/Python-$(PYTHON_VERSION).$(PLATFORM)" ]; then
+      echo "##vso[task.logissue type=error]Download failed or file not found."
+      exit 1
+    fi
+  displayName: '1. Download Python Installer Archive'
+
+# 2. Publish the Downloaded Archive as a Universal Package
+# --------------------------------------------------------------------------------
+- task: UniversalPackages@0
+  displayName: '2. Publish Universal Package to Azure Artifacts'
+  inputs:
+    command: 'publish'
+    # The directory containing the file(s) to publish
+    publishDirectory: '$(STAGING_DIR)' 
+    # The name of the Artifacts feed (use <ProjectName>/<FeedName> for project-scoped feeds)
+    vstsFeedPublish: '$(ARTIFACT_FEED)'
+    # The name of the package to create/update
+    packageName: '$(PACKAGE_NAME)'
+    # The version of the package
+    versionPublish: '$(PYTHON_VERSION)'
+    # Optional description
+    description: 'Python source distribution for Linux - v$(PYTHON_VERSION)'
+
+# 3. (Optional) Publish as a Pipeline Artifact for immediate use
+# --------------------------------------------------------------------------------
+- publish: $(STAGING_DIR)
+  artifact: 'PythonInstallerArchive'
+  displayName: '3. Publish as Pipeline Artifact'
+```
+
+-----
+
+## How to Consume the Universal Package
+
+Once the package is published, another pipeline or a machine can retrieve it using the **Universal Packages Download** task:
+
+```yaml
+- task: UniversalPackages@0
+  displayName: 'Download Python Installer UP'
+  inputs:
+    command: 'download'
+    vstsFeed: '<YOUR_FEED_NAME>'
+    packageName: 'Python-Linux-Interpreter'
+    version: '3.11.5'
+    downloadDirectory: '$(Agent.BuildDirectory)/PythonInstaller'
+```
+
+The downloaded file (`Python-3.11.5.tgz`) will be available in the `$(Agent.BuildDirectory)/PythonInstaller` directory, ready to be extracted and potentially compiled on the target Linux machine.
