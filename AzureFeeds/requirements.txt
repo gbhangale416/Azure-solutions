@@ -1,0 +1,4 @@
+--extra-index-url https://pkgs.dev.azure.com/Girija19/_packaging/py_tst/pypi/simple/
+--trusted-host pkgs.dev.azure.com
+snowflake-connector-python
+pyjwt
