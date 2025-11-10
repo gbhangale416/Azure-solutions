@@ -1,0 +1,30 @@
+trigger:
+- none   # run manually or hook into your repo later
+
+pool:
+  vmImage: 'ubuntu-latest'
+
+variables:
+  FEED_NAME: 'Python_feed'
+  FEED_URL: 'https://pkgs.dev.azure.com/Girija19/_packaging/Python_feed/pypi/simple/'
+
+steps:
+- task: UsePythonVersion@0
+  inputs:
+    versionSpec: '3.x'
+
+# Step 1: Upgrade pip and install helpers
+- script: |
+    python -m pip install --upgrade pip
+    python -m pip install keyring artifacts-keyring
+  displayName: 'Setup Python environment'
+- task: PipAuthenticate@1
+  inputs:
+    artifactFeeds: 'Python_feed'
+
+# Step 2: Install dependencies through Azure Artifacts feed proxy
+- script: |
+    pip install snowflake-connector-python \
+      --index-url $(FEED_URL) \
+      --trusted-host pkgs.dev.azure.com
+  displayName: 'Install Snowflake Connector via Azure Artifacts feed'
