@@ -1,0 +1,39 @@
+trigger:
+- none   # run manually or hook into your repo later
+
+pool:
+  vmImage: 'ubuntu-latest'
+
+variables:
+  FEED_URL: 'https://pkgs.dev.azure.com/Girija19/_packaging/py_tst/pypi/simple/'
+
+steps:
+- task: UsePythonVersion@0
+  displayName: 'Use Python 3.8'
+  inputs:
+    versionSpec: 3.8
+
+- bash: |
+   python -m pip install --upgrade pip
+   python -m pip install keyring artifacts-keyring
+  displayName: 'Installing dependency '
+
+- bash: |
+   pip install twine build keyring artifacts-keyring
+   pip download snowflake-connector-python -d dist
+   twine upload --repository-url https://pkgs.dev.azure.com/Girija19/_packaging/Python_feed/pypi/upload/ dist/*
+  displayName: '''Install/Cache Packages via Azure Artifacts copy'
+  enabled: false
+  env:
+    TWINE_PASSWORD: $(System.AccessToken)
+    TWINE_USERNAME: "AzureDevOps"
+
+- task: PipAuthenticate@1
+  displayName: 'Pip Authenticate'
+  inputs:
+    artifactFeeds: 'AzureFeeds/py_tst'
+
+- bash: 'pip install -r requirements.txt --extra-index-url $(FEED_URL) --trusted-host pkgs.dev.azure.com'
+  displayName: 'Install Snowflake Connector via Azure Artifacts feed'
+  env:
+    SYSTEM_ACCESSTOKEN: $(System.AccessToken)
