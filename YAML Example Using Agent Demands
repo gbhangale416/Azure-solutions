@@ -1,0 +1,21 @@
+trigger:
+- main
+
+pool:
+  name: 'SelfHostedPool'
+  demands:
+  - az
+  - python
+  - bash
+  - Agent.Version -gtVersion 2.214.0
+
+steps:
+
+- task: AzureCLI@2
+  displayName: "Run Azure CLI command"
+  inputs:
+    azureSubscription: 'My-Service-Connection'
+    scriptType: bash
+    scriptLocation: inlineScript
+    inlineScript: |
+      az account show
