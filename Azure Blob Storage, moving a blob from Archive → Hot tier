@@ -1,0 +1,211 @@
+In **Azure Blob Storage**, moving a blob from **Archive → Hot tier** is called **rehydration**. It’s not instant and has a few important steps and limitations.
+
+---
+
+## 🔄 What happens when you move Archive → Hot
+
+![Image](https://images.openai.com/static-rsc-4/-ulKcOjPZXP6ZWjWHhOWix_u2NttqwPBVlFYBaKeWSDMa2jfkF9MNCiwYHwzEx6RVQTyoV_sRQ-y-xNPaokOUMGKNbCIG508ZrhWXWP-CZ4hBelMxI6P0o--tkF6rady6PZRDYGNbaqghr12awD0AJX7nO9mY6I7DJHAS0XVsJfap7hP7LgD7YoaErnyj8so?purpose=fullsize)
+
+![Image](https://images.openai.com/static-rsc-4/zYKx_1zr4_l2Q_MvJzWJ_6-_9lZjG0c8dnyKCHvAyWXcdhXwaIugoLVurte0_vTOtB3zvwk6IONxXcOyXe5aa8VYwfyVBEGnlSRhQWNx0ZDbnQ1DEBFN7Ywo1McX7kC4bALjQrynuO9dAozGJ4vhXa8ZIJtVP68B9LN84GeW_MaZwAUA7L3ttPi5lewRnNpW?purpose=fullsize)
+
+![Image](https://images.openai.com/static-rsc-4/zBsJySUJLfDeEiWZud72rReeyEsF_zc3tbzmyhqVXQQJcGmZBRw5LzlG0sx5_jEcketsL5kffeZBV_cwGvUqOeXsLViFrdwko5QVnf-tXbhf1OQal-_Yb2G6MFL_JDTcW6C14fwKfst_JQ8fW_t2it__PuGIRD2p2QAbOy6KPmukhqA2FWsFAcMHADNixPox?purpose=fullsize)
+
+![Image](https://images.openai.com/static-rsc-4/HnGVtv0ooacYhSkAd6GZl5bYXTSfji_kD4bcizGrSnDW7ckd38qfbkGZm9_W9c-0veSROH0KsBNksK8ZMRnnTGFwTTLEzWzBqzROy4EP6NBb-dScHRodB2yzp_NOoNuK8se5RRCiZFAO9WaOnqBtWhOsGJsJhLvYczN2VzQZKUlzIJLnVbr5JcgnXp9GKSDs?purpose=fullsize)
+
+![Image](https://images.openai.com/static-rsc-4/PGbDzLc8WNSIMI7z5fMsixmgwmaQLfADkKAsLm9znZgpjzo-rhtWnMVtJmXAJpepz38b-ohH_ZfzF7gJLl5DCcyUcL92ZXyfSSxfWPjvOF9zxGMcUJ6yBi7UZl7C2QL6x3OF8clZe1Sp0QT7SSd69NtJtjXIwaOVBj9wbwXNbNgcF_XGVW_6VJwNfcS1RdTv?purpose=fullsize)
+
+![Image](https://images.openai.com/static-rsc-4/Z3Y2GWBCvfWdiafztkWQAjN4Na8PiaukQuWhevyd8JgKSf-DYKKLK4n1y7x73YRpy5GY_ht7FQpNZxgp1Q57Y3ZUle5VH2tYLRuIFOMUHfGnCDubI3g1hNd0ehfnIhTA7IZzea-MJKnnDz7C2gcoqXyfyUaFuOCLaQXSQ-iwruBeGft0D8cGqgLH9D8I_HeK?purpose=fullsize)
+
+When a blob is in **Archive tier**:
+
+* It is **offline** (you cannot read/download it directly)
+* To use it, you must **rehydrate** it to **Hot or Cool**
+
+---
+
+## ⚙️ How to change Archive → Hot
+
+### ✅ Option 1: Azure Portal
+
+1. Go to your **Storage Account**
+2. Open **Containers → Your container**
+3. Select the archived blob
+4. Click **Change tier**
+5. Choose **Hot**
+6. Select rehydration priority:
+
+   * **Standard** (default, slower)
+   * **High** (faster, more cost)
+
+---
+
+### ✅ Option 2: Azure CLI
+
+```bash
+az storage blob set-tier \
+  --account-name <storage-account-name> \
+  --container-name <container-name> \
+  --name <blob-name> \
+  --tier Hot \
+  --rehydrate-priority High
+```
+
+---
+
+### ✅ Option 3: Python (Azure SDK)
+
+```python
+from azure.storage.blob import BlobClient
+
+blob = BlobClient.from_connection_string(
+    conn_str,
+    container_name="your-container",
+    blob_name="your-blob"
+)
+
+blob.set_standard_blob_tier("Hot", rehydrate_priority="High")
+```
+
+---
+
+## ⏱️ Rehydration Time
+
+* **Standard priority** → ~12 to 15 hours
+* **High priority** → ~1 to 2 hours
+
+👉 During this time:
+
+* Blob status = `rehydrate-pending-to-hot`
+* You **cannot read/download** it yet
+
+---
+
+## 💰 Cost Considerations
+
+* **Rehydration cost applies**
+* **High priority costs more**
+* Early deletion charges may apply if:
+
+  * Blob was in Archive < 180 days
+
+---
+
+## ⚠️ Important Notes
+
+* You **cannot directly read** an archived blob
+* Tier change is **asynchronous**
+* Metadata is available, but data is not until rehydration completes
+* You can also rehydrate to **Cool tier** (cheaper than Hot)
+
+---
+
+## 💡 Pro Tip (for your use case)
+
+Since you mentioned lifecycle management earlier:
+
+* If files are archived automatically (e.g., after 1 year)
+* And later needed frequently
+  👉 Consider rehydrating to **Cool** first instead of Hot to save cost
+
+---
+
+If you want, I can also show:
+
+* Terraform config to automate rehydration triggers
+* OR a script to bulk rehydrate multiple blobs from Archive → Hot/Cool
+
+
+------------------------------------------------------------------------------------------------------------------------
+Here’s the same **Archive → Hot rehydration cost** explained in **USD ($)** so it’s easier to compare with Azure pricing.
+
+---
+
+# 💰 1. Data Retrieval Cost (Archive → Hot)
+
+* **Archive retrieval cost** ≈ **$0.02 – $0.03 per GB**
+
+👉 Example:
+
+* 100 GB → **$2 – $3**
+
+---
+
+# ⚡ 2. Rehydration Priority Cost
+
+| Priority | Cost      | Time       |
+| -------- | --------- | ---------- |
+| Standard | Base cost | ~12–15 hrs |
+| High     | ~2× cost  | ~1–2 hrs   |
+
+👉 Example (100 GB):
+
+* Standard → **$2 – $3**
+* High → **$4 – $6**
+
+---
+
+# 🗑️ 3. Early Deletion Cost (180-day rule)
+
+Archive tier requires **180 days minimum storage**
+
+### 📌 Archive storage price:
+
+* ≈ **$0.00099 per GB/day** (~$0.03/GB/month)
+
+### 📌 Example:
+
+* 100 GB archived for **60 days**
+* Remaining = **120 days**
+
+```text
+Daily cost = 100 × 0.00099 = $0.099/day
+Remaining cost = 120 × 0.099 = $11.88
+```
+
+👉 **Early deletion penalty ≈ $12**
+
+---
+
+# 📦 4. Hot Tier Storage Cost (after rehydration)
+
+* **Hot tier** ≈ **$0.018 – $0.023 per GB/month**
+
+👉 Example:
+
+* 100 GB → **$1.8 – $2.3 per month**
+
+---
+
+# 🧮 Full Example (100 GB)
+
+| Component                 | Cost     |
+| ------------------------- | -------- |
+| Retrieval (High priority) | $5       |
+| Early deletion            | $12      |
+| Hot storage (1 month)     | $2       |
+| **Total**                 | **~$19** |
+
+---
+
+# ⚠️ Key Observations
+
+* 🔴 **Early deletion cost is usually the biggest**
+* ⚡ High priority doubles retrieval cost
+* 💡 Archive is cheap for storage, but expensive to restore early
+
+---
+
+# 💡 Recommendation (Important)
+
+Based on your use case (lifecycle + restore):
+
+* If you **might need data again** → use **Cool tier**
+* If data is **rarely accessed** → Archive is fine
+
+---
+
+If you want, I can:
+
+* Calculate **exact cost for your container (like `archivepoc`)**
+* Or give a **script to estimate cost automatically from blob size**
+
