@@ -20,6 +20,8 @@ ARCHIVE_BASE_PATH = "/database/snow/Test_A/archive"
 DAYS = 10  # last 10 days only
 API_VERSION = "7.0"
 
+EXCLUDED_FOLDERS = ["org", "temp", "backup"]
+
 # =================================================
 
 BASE_URL = f"https://dev.azure.com/{ORG}/{PROJECT}/_apis/git/repositories/{REPO}"
@@ -140,6 +142,10 @@ def main():
             continue
 
         path = item["path"]
+		
+		# Exclude specific folders
+		if any(f"/{folder}/" in path for folder in EXCLUDED_FOLDERS):
+			continue
 
         # Only SQL files
         if not path.lower().endswith(".sql"):
